@@ -1,4 +1,5 @@
 import io
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -32,10 +33,10 @@ if "loaded_file_signature" not in st.session_state:
 with st.sidebar:
     st.header("데이터 입력")
     uploaded = st.file_uploader(
-        "CSV 또는 Excel 파일", type=["csv", "xlsx", "xls"]
+        "CSV 또는 Excel 파일", type=["csv", "xlsx"]
     )
     if uploaded is not None:
-        signature = (uploaded.name, uploaded.size)
+        signature = (uploaded.name, hashlib.sha256(uploaded.getvalue()).hexdigest())
         if signature != st.session_state.loaded_file_signature:
             try:
                 if uploaded.name.lower().endswith(".csv"):
