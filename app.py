@@ -6,6 +6,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from residual_diagnostics import residual_diagnostics
+
 from analysis import (
     MODEL_LABELS,
     correlation_analysis,
@@ -185,15 +187,85 @@ st.subheader("4. 기술통계")
 descriptive = descriptive_statistics(edited)
 st.dataframe(descriptive, use_container_width=True)
 
+diagnostics = None
 with st.expander("5. 잔차 분석"):
     residual_fig = go.Figure()
     residual_fig.add_trace(go.Scatter(x=result["predict"](x), y=residuals, mode="markers", name="잔차"))
     residual_fig.add_hline(y=0, line_dash="dash")
     residual_fig.update_layout(title="예측값 대비 잔차", xaxis_title="예측값", yaxis_title="잔차 (관측값 - 예측값)")
     st.plotly_chart(residual_fig, use_container_width=True)
+
+    if not weighted and model in ("linear", "polynomial"):
+        try:
+            diagnostics = residual_diagnostics(x, y, model=model, degree=degree)
+            d1, d2, d3 = st.columns(3)
+            d1.metric("이상치 후보", f"{int(diagnostics['outlier_flags'].sum())}개")
+            d2.metric("고레버리지 점", f"{int(diagnostics['high_leverage_flags'].sum())}개")
+            d3.metric("영향점 후보", f"{int(diagnostics['influential_flags'].sum())}개")
+
+            studentized_fig = go.Figure()
+            studentized_fig.add_trace(go.Scatter(
+                x=np.arange(1, len(x) + 1),
+                y=diagnostics["studentized_residuals"],
+                mode="markers+lines",
+                name="외적 스튜던트화 잔차",
+                text=[f"X={value:g}, Y={observed:g}" for value, observed in zip(x, y)],
+                hovertemplate="관측 순서=%{x}<br>외적 스튜던트화 잔차=%{y:.4g}<br>%{text}<extra></extra>",
+            ))
+            studentized_fig.add_hline(y=3, line_dash="dash", line_color="red")
+            studentized_fig.add_hline(y=-3, line_dash="dash", line_color="red")
+            studentized_fig.update_layout(
+                title="외적 스튜던트화 잔차 및 이상치 후보 (|값| > 3)",
+                xaxis_title="관측 순서", yaxis_title="외적 스튜던트화 잔차",
+            )
+            st.plotly_chart(studentized_fig, use_container_width=True)
+
+            influence_fig = go.Figure()
+            influence_fig.add_trace(go.Scatter(
+                x=diagnostics["leverage"], y=diagnostics["cooks_distance"],
+                mode="markers", name="관측값",
+                text=[f"관측 순서 {i + 1}" for i in range(len(x))],
+                hovertemplate="%{text}<br>레버리지=%{x:.4g}<br>Cook's D=%{y:.4g}<extra></extra>",
+            ))
+            influence_fig.add_hline(y=diagnostics["cook_cutoff"], line_dash="dash", line_color="red")
+            influence_fig.add_vline(x=diagnostics["leverage_cutoff"], line_dash="dash", line_color="orange")
+            influence_fig.update_layout(
+                title="레버리지와 Cook's distance",
+                xaxis_title="레버리지 (기준: 2p/n)", yaxis_title="Cook's distance (기준: 4/(n-p))",
+            )
+            st.plotly_chart(influence_fig, use_container_width=True)
+
+            if np.isfinite(diagnostics["shapiro_p_value"]):
+                st.caption(
+                    f"잔차 정규성 Shapiro–Wilk 검정: W={diagnostics['shapiro_w']:.5g}, "
+                    f"p-value={diagnostics['shapiro_p_value']:.5g} "
+                    "(표본 3~5,000개에서 계산)"
+                )
+            else:
+                st.caption("Shapiro–Wilk 정규성 검정은 잔차가 상수이거나 표본 수가 3~5,000개 범위 밖이면 생략합니다.")
+
+            st.caption(
+                "판정 기준은 탐색용 휴리스틱입니다: |외적 스튜던트화 잔차| > 3, "
+                "레버리지 > 2p/n, Cook's D > 4/(n-p). "
+                "이상치 후보를 자동 삭제하지 말고 실험 기록과 측정 조건을 확인하세요."
+            )
+        except ValueError as exc:
+            st.info(f"영향도 진단을 계산할 수 없습니다: {exc}")
+    elif weighted:
+        st.caption("가중 선형회귀의 영향도 진단은 아직 제공하지 않습니다. 아래 잔차 그래프와 표는 가중 적합 결과를 기준으로 표시합니다.")
+    else:
+        st.caption("표준화 잔차, 레버리지 및 Cook's distance는 현재 선형·다항 회귀에서만 제공합니다.")
+
     residual_table = clean.copy()
     residual_table["예측값"] = result["predict"](x)
     residual_table["잔차"] = residuals
+    if diagnostics is not None:
+        residual_table["표준화 잔차"] = diagnostics["standardized_residuals"]
+        residual_table["외적 스튜던트화 잔차"] = diagnostics["studentized_residuals"]
+        residual_table["레버리지"] = diagnostics["leverage"]
+        residual_table["Cook's distance"] = diagnostics["cooks_distance"]
+        residual_table["이상치 후보"] = diagnostics["outlier_flags"]
+        residual_table["영향점 후보"] = diagnostics["influential_flags"]
     st.dataframe(residual_table, use_container_width=True)
 
 st.subheader("6. 결과 내보내기")
@@ -202,6 +274,13 @@ export_df["예측값"] = result["predict"](x)
 export_df["잔차"] = residuals
 if weighted:
     export_df["가중치 (1/σ²)"] = result["weights"]
+if diagnostics is not None:
+    export_df["표준화 잔차"] = diagnostics["standardized_residuals"]
+    export_df["외적 스튜던트화 잔차"] = diagnostics["studentized_residuals"]
+    export_df["레버리지"] = diagnostics["leverage"]
+    export_df["Cook's distance"] = diagnostics["cooks_distance"]
+    export_df["이상치 후보"] = diagnostics["outlier_flags"]
+    export_df["영향점 후보"] = diagnostics["influential_flags"]
 csv_bytes = export_df.to_csv(index=False).encode("utf-8-sig")
 st.download_button("분석 데이터 CSV 다운로드", data=csv_bytes, file_name="analysis_results.csv", mime="text/csv")
 excel_buffer = io.BytesIO()
