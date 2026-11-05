@@ -24,6 +24,10 @@ if "data" not in st.session_state:
     st.session_state.data = pd.DataFrame(
         {"X": [1.0, 2.0, 3.0, 4.0, 5.0], "Y": [2.1, 3.9, 6.2, 7.8, 10.1]}
     )
+if "data_version" not in st.session_state:
+    st.session_state.data_version = 0
+if "loaded_file_signature" not in st.session_state:
+    st.session_state.loaded_file_signature = None
 
 with st.sidebar:
     st.header("데이터 입력")
@@ -31,20 +35,26 @@ with st.sidebar:
         "CSV 또는 Excel 파일", type=["csv", "xlsx", "xls"]
     )
     if uploaded is not None:
-        try:
-            if uploaded.name.lower().endswith(".csv"):
-                loaded = pd.read_csv(uploaded)
-            else:
-                loaded = pd.read_excel(uploaded)
-            st.session_state.data = loaded
-            st.success(f"{len(loaded):,}개 행을 불러왔습니다.")
-        except Exception as exc:
-            st.error(f"파일을 읽지 못했습니다: {exc}")
+        signature = (uploaded.name, uploaded.size)
+        if signature != st.session_state.loaded_file_signature:
+            try:
+                if uploaded.name.lower().endswith(".csv"):
+                    loaded = pd.read_csv(uploaded)
+                else:
+                    loaded = pd.read_excel(uploaded)
+                st.session_state.data = loaded
+                st.session_state.data_version += 1
+                st.session_state.loaded_file_signature = signature
+                st.success(f"{len(loaded):,}개 행을 불러왔습니다.")
+            except Exception as exc:
+                st.error(f"파일을 읽지 못했습니다: {exc}")
 
     if st.button("예제 데이터로 초기화", use_container_width=True):
         st.session_state.data = pd.DataFrame(
             {"X": [1.0, 2.0, 3.0, 4.0, 5.0], "Y": [2.1, 3.9, 6.2, 7.8, 10.1]}
         )
+        st.session_state.data_version += 1
+        st.session_state.loaded_file_signature = None
         st.rerun()
 
 st.subheader("1. 데이터")
@@ -53,7 +63,7 @@ edited = st.data_editor(
     st.session_state.data,
     num_rows="dynamic",
     use_container_width=True,
-    key="data_editor",
+    key=f"data_editor_{st.session_state.data_version}",
 )
 st.session_state.data = edited
 
