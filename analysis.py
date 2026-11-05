@@ -107,7 +107,6 @@ def descriptive_statistics(data: pd.DataFrame) -> pd.DataFrame:
     summary = numeric.describe().T
     summary["variance"] = numeric.var(ddof=1)
     summary["sem"] = numeric.sem()
-    summary["median"] = numeric.median()
     return summary.rename(
         columns={
             "count": "개수",
@@ -120,6 +119,5 @@ def descriptive_statistics(data: pd.DataFrame) -> pd.DataFrame:
             "max": "최댓값",
             "variance": "분산",
             "sem": "표준오차",
-            "median": "중앙값(별도)",
         }
     )
