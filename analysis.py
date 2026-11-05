@@ -132,7 +132,9 @@ def weighted_linear_regression(x, y, uncertainty):
     # sigma is an absolute 1-SD measurement uncertainty; do not rescale covariance.
     slope_se = float(np.sqrt(max(covariance_base[0, 0], 0.0)))
     t_stat = slope / slope_se if slope_se > 0 else float("inf")
-    p_value = float(2 * stats.t.sf(abs(t_stat), dof)) if np.isfinite(t_stat) else 0.0
+    # With supplied absolute standard uncertainties, the slope statistic is
+    # standardized by its known-variance standard error (normal reference).
+    p_value = float(2 * stats.norm.sf(abs(t_stat))) if np.isfinite(t_stat) else 0.0
     return {
         "predict": predict,
         "equation": f"y = {slope:.6g}x {'+' if intercept >= 0 else '-'} {abs(intercept):.6g}",
