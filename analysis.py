@@ -129,8 +129,8 @@ def weighted_linear_regression(x, y, uncertainty):
     dof = x.size - 2
     covariance_base = np.linalg.inv(design.T @ (weights[:, None] * design))
     reduced_chi_square = float(np.sum(weights * residuals**2) / dof)
-    covariance = covariance_base * reduced_chi_square
-    slope_se = float(np.sqrt(max(covariance[0, 0], 0.0)))
+    # sigma is an absolute 1-SD measurement uncertainty; do not rescale covariance.
+    slope_se = float(np.sqrt(max(covariance_base[0, 0], 0.0)))
     t_stat = slope / slope_se if slope_se > 0 else float("inf")
     p_value = float(2 * stats.t.sf(abs(t_stat), dof)) if np.isfinite(t_stat) else 0.0
     return {
