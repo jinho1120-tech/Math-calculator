@@ -66,6 +66,8 @@ def residual_diagnostics(x, y, model="linear", degree=2):
         denominator = np.sqrt(deleted_variance * np.maximum(1 - leverage, 0))
         valid = denominator > 0
         external[valid] = residuals[valid] / denominator[valid]
+        zero_scale = (denominator == 0) & (residuals != 0)
+        external[zero_scale] = np.sign(residuals[zero_scale]) * np.inf
         exact_fit = (residuals == 0) & (denominator == 0)
         external[exact_fit] = 0.0
 
@@ -93,7 +95,7 @@ def residual_diagnostics(x, y, model="linear", degree=2):
         "studentized_residuals": external,
         "leverage": leverage,
         "cooks_distance": cook_distance,
-        "outlier_flags": np.isfinite(external) & (np.abs(external) > outlier_cutoff),
+        "outlier_flags": ~np.isnan(external) & (np.abs(external) > outlier_cutoff),
         "high_leverage_flags": leverage > leverage_cutoff,
         "influential_flags": cook_distance > cook_cutoff,
         "outlier_cutoff": outlier_cutoff,
