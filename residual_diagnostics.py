@@ -49,6 +49,13 @@ def residual_diagnostics(x, y, model="linear", degree=2):
     sse = float(np.sum(residuals**2))
     mse = sse / dof
     residual_scale = float(np.sqrt(mse))
+    # Treat floating-point roundoff from an exact fit as zero residual variance.
+    numerical_tolerance = np.finfo(float).eps * max(1.0, float(np.linalg.norm(y))) * 10
+    if residual_scale <= numerical_tolerance:
+        residuals = np.zeros_like(residuals)
+        sse = 0.0
+        mse = 0.0
+        residual_scale = 0.0
 
     if residual_scale > 0:
         internal = residuals / (residual_scale * np.sqrt(np.maximum(1 - leverage, 0)))
